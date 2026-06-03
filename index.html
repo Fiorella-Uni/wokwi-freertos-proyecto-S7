@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proyecto FreeRTOS · ESP32 + DHT22</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f0a;
+    --pcb: #0d2818;
+    --green: #2dff6e;
+    --green-dim: #1a8a3e;
+    --green-faint: #0d3d1e;
+    --amber: #f5a623;
+    --red: #ff4444;
+    --blue: #4488ff;
+    --text: #c8f0d0;
+    --text-dim: #5a8a6a;
+    --border: #1e4a2a;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow-x: hidden;
+  }
+
+  /* PCB grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Via dots on grid */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle, #1e4a2a 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: 20px 20px;
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ====== HEADER ====== */
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 60px 40px 40px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .badge-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .badge-green { background: var(--green-faint); color: var(--green); border: 1px solid var(--green-dim); }
+  .badge-amber { background: #2a1e00; color: var(--amber); border: 1px solid #6a4a00; }
+  .badge-blue  { background: #001a40; color: var(--blue);  border: 1px solid #1a3a80; }
+  .badge-red   { background: #2a0a0a; color: var(--red);   border: 1px solid #6a1a1a; }
+
+  h1 {
+    font-family: var(--sans);
+    font-size: clamp(32px, 5vw, 60px);
+    font-weight: 800;
+    line-height: 1.0;
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+
+  h1 span { color: var(--green); }
+
+  .subtitle {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+
+  .meta-block {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 2;
+    min-width: 180px;
+  }
+  .meta-block strong { color: var(--green); }
+
+  /* ====== MAIN CONTENT ====== */
+  main {
+    position: relative;
+    z-index: 10;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 40px 80px;
+  }
+
+  /* ====== SECTION LABELS ====== */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--green-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 56px 0 24px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ====== CONCEPT CARDS ====== */
+  .concept-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1px;
+    border: 1px solid var(--border);
+    background: var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .concept-card {
+    background: var(--pcb);
+    padding: 28px 24px;
+    position: relative;
+    transition: background 0.2s;
+  }
+  .concept-card:hover { background: #0f2e18; }
+
+  .concept-card .icon-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .concept-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+  }
+  .ci-green { background: var(--green-faint); color: var(--green); }
+  .ci-amber { background: #2a1e00; color: var(--amber); }
+  .ci-blue  { background: #001a40; color: var(--blue); }
+  .ci-red   { background: #2a0a0a; color: var(--red); }
+
+  .concept-card h3 {
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+
+  .concept-card p {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
+
+  .concept-card code {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--green-faint);
+    color: var(--green);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ====== DIAGRAM SECTION ====== */
+  .diagram-wrapper {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--pcb);
+  }
+
+  .diagram-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: #081510;
+  }
+
+  .dot-row { display: flex; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+
+  .diagram-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .diagram-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--green);
+    background: var(--green-faint);
+    border: 1px solid var(--green-dim);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+
+  .diagram-body {
+    padding: 40px 20px;
+    display: flex;
+    justify-content: center;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      #0e2218 39px,
+      #0e2218 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      #0e2218 39px,
+      #0e2218 40px
+    );
+  }
+
+  .diagram-body svg { max-width: 700px; width: 100%; }
+
+  /* ====== CONNECTIONS TABLE ====== */
+  .conn-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+    margin-top: 0;
+  }
+
+  .conn-table th {
+    background: #081510;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+
+  .conn-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  .conn-table tr:last-child td { border-bottom: none; }
+  .conn-table tr:hover td { background: #0f2218; }
+
+  .wire-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  /* ====== TASK FLOW ====== */
+  .task-flow {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 0;
+    align-items: start;
+  }
+
+  .task-col {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--pcb);
+  }
+
+  .task-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: #081510;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .task-header h4 {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #fff;
+  }
+
+  .prio-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .prio-high { background: var(--green-faint); color: var(--green); border: 1px solid var(--green-dim); }
+  .prio-low  { background: #001a40; color: var(--blue);  border: 1px solid #1a3a80; }
+
+  .task-step {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.6;
+  }
+  .task-step:last-child { border-bottom: none; }
+  .task-step .step-num {
+    color: var(--green-dim);
+    min-width: 16px;
+    font-size: 10px;
+    margin-top: 1px;
+  }
+  .task-step .hl { color: var(--green); }
+  .task-step .hl-amber { color: var(--amber); }
+
+  .arrow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 80px;
+    gap: 4px;
+  }
+  .arrow-col span {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--green-dim);
+    text-align: center;
+    line-height: 1.4;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    letter-spacing: 0.1em;
+  }
+
+  .mutex-center {
+    grid-column: 1 / -1;
+    margin-top: 16px;
+    border: 1px solid var(--green-dim);
+    border-radius: 8px;
+    padding: 16px 20px;
+    background: var(--green-faint);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .mutex-center .mu-icon {
+    font-family: var(--mono);
+    font-size: 20px;
+    color: var(--green);
+  }
+  .mutex-center h4 {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--green);
+    margin-bottom: 4px;
+  }
+  .mutex-center p {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* ====== TEAM FOOTER ====== */
+  .team-section {
+    margin-top: 56px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--pcb);
+  }
+
+  .team-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: #081510;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1px;
+    background: var(--border);
+  }
+
+  .team-card {
+    background: var(--pcb);
+    padding: 18px 20px;
+    transition: background 0.2s;
+  }
+  .team-card:hover { background: #0f2218; }
+
+  .team-card .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: var(--green-faint);
+    border: 1px solid var(--green-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--green);
+    margin-bottom: 10px;
+    font-weight: 700;
+  }
+
+  .team-card .name {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 3px;
+  }
+
+  .team-card .role {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* ====== PYTHON SIMULATOR ====== */
+  .sim-wrapper {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--pcb);
+  }
+
+  .sim-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: #081510;
+  }
+
+  .sim-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+  }
+
+  .sim-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(45,255,110,0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 5px rgba(45,255,110,0); }
+  }
+
+  /* Monitor panel */
+  .monitor-body {
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    background: #060e09;
+  }
+  @media (max-width: 640px) { .monitor-body { grid-template-columns: 1fr; } }
+
+  .mon-card {
+    background: var(--pcb);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 22px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mon-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .mon-card.temp::before { background: linear-gradient(90deg, #00d4ff, #0066ff); }
+  .mon-card.hum::before  { background: linear-gradient(90deg, var(--amber), #ff0080); }
+
+  .mon-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .mon-value {
+    font-size: 64px;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+  .mon-card.temp .mon-value { color: #00d4ff; }
+  .mon-card.hum  .mon-value { color: var(--amber); }
+
+  .mon-unit {
+    font-size: 18px;
+    font-weight: 300;
+    color: var(--text-dim);
+    vertical-align: top;
+    margin-top: 12px;
+    display: inline-block;
+  }
+  .mon-bar-track {
+    height: 3px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 2px;
+    margin-top: 14px;
+    overflow: hidden;
+  }
+  .mon-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1.8s ease;
+  }
+  .mon-card.temp .mon-bar-fill { background: linear-gradient(90deg, #00d4ff, #0066ff); }
+  .mon-card.hum  .mon-bar-fill { background: linear-gradient(90deg, var(--amber), #ff0080); }
+
+  /* Task cards */
+  .tasks-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 640px) { .tasks-row { grid-template-columns: 1fr; } }
+
+  .task-mini {
+    background: var(--pcb);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-family: var(--mono);
+  }
+  .task-mini-name {
+    font-size: 10px;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+  .task-mini-info {
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
+  .prio-pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 2px;
+    font-size: 9px;
+    font-weight: bold;
+  }
+  .prio-5 { background: rgba(255,107,53,.15); color: var(--amber); }
+  .prio-3 { background: rgba(0,212,255,.12); color: #00d4ff; }
+
+  /* Status bar */
+  .sim-statusbar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: rgba(0,212,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .led-green {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.5s ease-in-out infinite; flex-shrink: 0;
+  }
+  .status-running { color: var(--green); }
+  .mutex-ok {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px;
+    background: rgba(45,255,110,.07);
+    border: 1px solid rgba(45,255,110,.18);
+    border-radius: 3px;
+    font-size: 9px;
+    color: var(--green);
+  }
+  .uptime-meta { margin-left: auto; color: var(--text-dim); font-size: 10px; }
+
+  /* Serial console */
+  .serial-console {
+    grid-column: 1 / -1;
+    background: #020a04;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    height: 160px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .serial-line { display: block; white-space: pre; }
+  .sl-sensor { color: var(--green); }
+  .sl-http   { color: #4488ff; }
+  .sl-setup  { color: var(--amber); }
+  .sl-ts     { color: var(--text-dim); }
+
+  .sim-footer {
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    background: #081510;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .sim-footer a {
+    color: var(--green-dim);
+    text-decoration: none;
+  }
+  .sim-footer a:hover { color: var(--green); }
+
+  /* timestamp below monitor */
+  .sim-timestamp {
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: rgba(200,240,208,0.2);
+    letter-spacing: 0.1em;
+    padding: 8px 0 2px;
+  }
+
+  /* ====== ANIMATIONS ====== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .cursor::after {
+    content: '_';
+    animation: blink 1s step-end infinite;
+    color: var(--green);
+  }
+
+  header, .concept-grid, .diagram-wrapper, .task-flow, .team-section {
+    animation: fadeUp 0.6s ease both;
+  }
+  .concept-grid { animation-delay: 0.1s; }
+  .diagram-wrapper { animation-delay: 0.2s; }
+  .task-flow { animation-delay: 0.3s; }
+  .team-section { animation-delay: 0.4s; }
+
+  /* ====== LED parpadeante ====== */
+  @keyframes ledPulse {
+    0%, 90%, 100% { opacity: 1; }
+    95% { opacity: 0.2; }
+  }
+  .led-pulse { animation: ledPulse 2s ease-in-out infinite; }
+
+  /* ====== Responsive ====== */
+  @media (max-width: 640px) {
+    header { grid-template-columns: 1fr; padding: 32px 20px 24px; }
+    main { padding: 0 20px 60px; }
+    .meta-block { text-align: left; }
+    .task-flow { grid-template-columns: 1fr; }
+    .arrow-col { display: none; }
+    .mutex-center { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div>
+    <div class="badge-row">
+      <span class="badge badge-green">FreeRTOS</span>
+      <span class="badge badge-amber">ESP32 DevKit v4</span>
+      <span class="badge badge-blue">DHT22</span>
+      <span class="badge badge-red">Mutex</span>
+    </div>
+    <h1>Sistema de<br><span>Monitoreo</span><br>con <span class="cursor">FreeRTOS</span></h1>
+    <p class="subtitle">// Multitarea en tiempo real · Sensor de temperatura · Servidor web HTTP</p>
+  </div>
+  <div class="meta-block">
+    <div><strong>Asignatura</strong><br>Sistemas Operativos</div>
+    <br>
+    <div><strong>Semana</strong><br>7 — Componente Práctico</div>
+    <br>
+    <div><strong>Plataforma</strong><br>Wokwi Simulator</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- SECCIÓN: CONCEPTO -->
+  <div class="section-label">// 01 — Concepto del proyecto</div>
+
+  <div class="concept-grid">
+    <div class="concept-card">
+      <div class="icon-row">
+        <div class="concept-icon ci-green">⚡</div>
+      </div>
+      <h3>Multitarea con FreeRTOS</h3>
+      <p>Dos tareas corren en paralelo sobre el ESP32. <code>tareaSensor</code> lee el DHT22 cada 2 s. <code>tareaWeb</code> atiende peticiones HTTP. El planificador de FreeRTOS distribuye el CPU entre ambas.</p>
+    </div>
+    <div class="concept-card">
+      <div class="icon-row">
+        <div class="concept-icon ci-amber">🔒</div>
+      </div>
+      <h3>Mutex para exclusión mutua</h3>
+      <p>La variable <code>temperatura</code> es un recurso compartido. Un <code>SemaphoreHandle_t</code> garantiza que solo una tarea acceda a ella por vez, evitando condiciones de carrera.</p>
+    </div>
+    <div class="concept-card">
+      <div class="icon-row">
+        <div class="concept-icon ci-blue">🌐</div>
+      </div>
+      <h3>Servidor web embebido</h3>
+      <p>El ESP32 expone un servidor HTTP en el puerto 80 a través de su WiFi integrado. La página se auto-refresca cada 2 s mostrando la temperatura en tiempo real desde el navegador.</p>
+    </div>
+    <div class="concept-card">
+      <div class="icon-row">
+        <div class="concept-icon ci-red">🌡</div>
+      </div>
+      <h3>Sensor DHT22</h3>
+      <p>Conectado al GPIO 15. Mide temperatura con resolución de 0.1 °C. La lectura usa <code>dht.readTemperature()</code> y se valida con <code>isnan()</code> para descartar valores inválidos.</p>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: DIAGRAMA -->
+  <!-- SECCIÓN: SIMULADOR EN TIEMPO REAL -->
+  <div class="section-label">// 02 — Simulador en tiempo real · Wokwi</div>
+
+  <div class="sim-wrapper">
+    <div class="sim-topbar">
+      <div class="dot-row">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+      </div>
+      <div class="sim-status">
+        <div class="sim-pulse"></div>
+        SIMULADOR ACTIVO — ESP32 FreeRTOS · Python sim (JS)
+      </div>
+      <span class="diagram-badge">simulador.py</span>
+    </div>
+
+    <!-- ====== MONITOR BODY ====== -->
+    <div class="monitor-body">
+
+      <!-- Temperatura -->
+      <div class="mon-card temp">
+        <div class="mon-label">// TEMPERATURA — DHT22</div>
+        <div>
+          <span class="mon-value" id="val-temp">--.-</span><span class="mon-unit">&nbsp;°C</span>
+        </div>
+        <div class="mon-bar-track">
+          <div class="mon-bar-fill" id="bar-temp" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Humedad -->
+      <div class="mon-card hum">
+        <div class="mon-label">// HUMEDAD — DHT22</div>
+        <div>
+          <span class="mon-value" id="val-hum">--.-</span><span class="mon-unit">&nbsp;%</span>
+        </div>
+        <div class="mon-bar-track">
+          <div class="mon-bar-fill" id="bar-hum" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Tareas -->
+      <div class="tasks-row">
+        <div class="task-mini">
+          <div class="task-mini-name">TASK_SENSOR</div>
+          <div class="task-mini-info">
+            Stack: 4096 B<br>
+            <span class="prio-pill prio-5">PRIO 5</span><br>
+            Delay: 2000 ms
+          </div>
+        </div>
+        <div class="task-mini">
+          <div class="task-mini-name">TASK_HTTPD</div>
+          <div class="task-mini-info">
+            Stack: 4096 B<br>
+            <span class="prio-pill prio-3">PRIO 3</span><br>
+            Puerto: 8180
+          </div>
+        </div>
+      </div>
+
+      <!-- Status bar -->
+      <div class="sim-statusbar">
+        <div class="led-green"></div>
+        <span class="status-running">FREERTOS RUNNING</span>
+        <span class="mutex-ok">🔒 MUTEX OK</span>
+        <span class="uptime-meta">T+<span id="uptime">0</span>s</span>
+      </div>
+
+      <!-- Serial console -->
+      <div class="serial-console" id="serial-console">
+        <span class="serial-line sl-setup">====================================================</span>
+        <span class="serial-line sl-setup">  ESP32 FreeRTOS Simulator - DHT22 Monitor</span>
+        <span class="serial-line sl-setup">  Asignatura: Sistemas Operativos - Semana 7</span>
+        <span class="serial-line sl-setup">  Estudiante: Fiorella</span>
+        <span class="serial-line sl-setup">====================================================</span>
+        <span class="serial-line sl-setup">[SETUP] MUTEX (threading.Lock) creado correctamente.</span>
+        <span class="serial-line sl-setup">[SETUP] Tarea 1 (task_sensor) iniciada - Prioridad 5.</span>
+        <span class="serial-line sl-setup">[SETUP] Tarea 2 (task_httpd)  iniciada - Puerto 8180.</span>
+        <span class="serial-line sl-setup">[SETUP] Sistema listo. FreeRTOS (Python) planificando tareas...</span>
+      </div>
+
+      <div class="sim-timestamp" style="grid-column:1/-1;">
+        Última lectura: <span id="ts-label">--:--:--</span> &nbsp;|&nbsp; Auto-refresh: 2s
+      </div>
+    </div>
+    <!-- ====== /MONITOR BODY ====== -->
+
+    <div class="sim-footer">
+      <span>▶ Simulando <strong style="color:var(--green)">simulador.py</strong> — task_sensor + task_httpd + MUTEX</span>
+      <a href="https://wokwi.com/projects/465466369703333889" target="_blank" rel="noopener">Ver en Wokwi ↗</a>
+    </div>
+  </div>
+
+  <!-- ====== SIMULATOR SCRIPT (replica exacta de simulador.py) ====== -->
+  <script>
+  (function() {
+    // ---- Variables compartidas (recurso crítico) ----
+    let g_temperatura = 25.0;
+    let g_humedad     = 60.0;
+    const g_inicio    = Date.now();
+
+    // ---- Mutex (flag simple JS — equivale a threading.Lock) ----
+    let mutex_locked = false;
+
+    function mutex_take() {
+      // Spin-wait (simplificado para JS single-thread)
+      mutex_locked = true;
+    }
+    function mutex_give() {
+      mutex_locked = false;
+    }
+
+    // ---- Simulación DHT22 (variación sinusoidal + ruido gaussiano) ----
+    let fase_temp = 0.0;
+    let fase_hum  = 0.5;
+
+    function gauss(mean, std) {
+      // Box-Muller
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      return mean + std * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+
+    function simular_temperatura() {
+      fase_temp += 0.15;
+      const base  = 24.0 + 6.0 * Math.sin(fase_temp);
+      const ruido = gauss(0, 0.3);
+      return Math.round((base + ruido) * 10) / 10;
+    }
+
+    function simular_humedad() {
+      fase_hum += 0.10;
+      const base  = 60.0 + 15.0 * Math.cos(fase_hum);
+      const ruido = gauss(0, 0.5);
+      return Math.round((base + ruido) * 10) / 10;
+    }
+
+    // ---- Elementos DOM ----
+    const elTemp    = document.getElementById('val-temp');
+    const elHum     = document.getElementById('val-hum');
+    const barTemp   = document.getElementById('bar-temp');
+    const barHum    = document.getElementById('bar-hum');
+    const elUptime  = document.getElementById('uptime');
+    const elTs      = document.getElementById('ts-label');
+    const console_  = document.getElementById('serial-console');
+    let   httpCount = 0;
+
+    function pad2(n) { return String(n).padStart(2,'0'); }
+    function nowStr() {
+      const d = new Date();
+      return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+    }
+
+    function appendLine(text, cls) {
+      const span = document.createElement('span');
+      span.className = 'serial-line ' + cls;
+      span.textContent = text;
+      console_.appendChild(span);
+      console_.scrollTop = console_.scrollHeight;
+    }
+
+    // ---- TAREA 1: task_sensor  (cada 2000 ms) ----
+    function task_sensor() {
+      const temp = simular_temperatura();
+      const hum  = simular_humedad();
+
+      // -- SECCIÓN CRÍTICA: tomar MUTEX antes de escribir --
+      mutex_take();
+        g_temperatura = temp;
+        g_humedad     = hum;
+      mutex_give();
+      // -- FIN SECCIÓN CRÍTICA --
+
+      const uptime = Math.floor((Date.now() - g_inicio) / 1000);
+      appendLine(
+        `[SENSOR] T=${temp.toFixed(1)}°C | H=${hum.toFixed(1)}% | Uptime=${uptime}s`,
+        'sl-sensor'
+      );
+    }
+
+    // ---- TAREA 2: task_httpd  (simula requests HTTP cada 3-7s) ----
+    function task_httpd_request() {
+      // -- SECCIÓN CRÍTICA: tomar MUTEX antes de leer --
+      mutex_take();
+        const temp = g_temperatura;
+        const hum  = g_humedad;
+      mutex_give();
+      // -- FIN SECCIÓN CRÍTICA --
+
+      httpCount++;
+      appendLine(
+        `[HTTP ] 127.0.0.1 → GET / HTTP/1.1 200 OK  (T=${temp.toFixed(1)}°C H=${hum.toFixed(1)}%)`,
+        'sl-http'
+      );
+    }
+
+    // ---- Actualizar DOM (equivale a la página HTML del ESP32) ----
+    function updateDisplay() {
+      // -- SECCIÓN CRÍTICA: leer variables con MUTEX --
+      mutex_take();
+        const temp = g_temperatura;
+        const hum  = g_humedad;
+      mutex_give();
+
+      elTemp.textContent = temp.toFixed(1);
+      elHum.textContent  = hum.toFixed(1);
+
+      const barT = Math.max(0, Math.min(100, (temp - 15) / 25 * 100));
+      const barH = Math.max(0, Math.min(100, hum));
+      barTemp.style.width = barT + '%';
+      barHum.style.width  = barH + '%';
+
+      const uptime = Math.floor((Date.now() - g_inicio) / 1000);
+      elUptime.textContent = uptime;
+      elTs.textContent = nowStr();
+    }
+
+    // ---- Planificador de tareas ----
+    // task_sensor: cada 2000ms  (vTaskDelay(2000 / portTICK_PERIOD_MS))
+    setInterval(function() {
+      task_sensor();
+      updateDisplay();
+    }, 2000);
+
+    // task_httpd requests simuladas: aleatoriamente cada 3-6s
+    function scheduleHttpd() {
+      task_httpd_request();
+      setTimeout(scheduleHttpd, 3000 + Math.random() * 3000);
+    }
+    setTimeout(scheduleHttpd, 2500);
+
+    // Primera lectura inmediata
+    task_sensor();
+    updateDisplay();
+  })();
+  </script>
+
+  <div class="section-label">// 03 — Proyecto en Wokwi</div>
+
+  <div class="diagram-wrapper">
+    <div class="diagram-topbar">
+      <div class="dot-row">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g led-pulse"></div>
+      </div>
+      <span class="diagram-title">ESP32 DevKit v4 + DHT22 · FreeRTOS</span>
+      <span class="diagram-badge">&#9679; Wokwi</span>
+    </div>
+    <div style="padding:0; background:#000;">
+      <iframe
+        src="https://wokwi.com/projects/465466369703333889"
+        title="Proyecto Wokwi — ESP32 FreeRTOS DHT22"
+        allow="fullscreen"
+        loading="lazy"
+        style="width:100%; height:600px; border:none; display:block;"
+      ></iframe>
+    </div>
+    <div style="padding:10px 20px; border-top:1px solid var(--border); background:#081510; display:flex; align-items:center; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--text-dim);">
+      <span>▶ Presiona <strong style="color:var(--green)">Play</strong> dentro del simulador para iniciar la ejecución</span>
+      <a href="https://wokwi.com/projects/465466369703333889" target="_blank" rel="noopener" style="color:var(--green-dim); text-decoration:none;">Abrir en Wokwi ↗</a>
+    </div>
+
+  </div>
+
+  <!-- SECCIÓN: FLUJO DE TAREAS -->
+  <div class="section-label">// 04 — Flujo de tareas FreeRTOS</div>
+
+  <div class="task-flow">
+    <div class="task-col">
+      <div class="task-header">
+        <h4>tareaSensor()</h4>
+        <span class="prio-badge prio-high">Prioridad 2</span>
+      </div>
+      <div class="task-step"><span class="step-num">01</span><span>Espera <code class="hl">vTaskDelay(2000ms)</code> cediendo el CPU</span></div>
+      <div class="task-step"><span class="step-num">02</span><span>Lee <code class="hl">dht.readTemperature()</code></span></div>
+      <div class="task-step"><span class="step-num">03</span><span>Valida con <code class="hl">isnan()</code> — descarta si falla</span></div>
+      <div class="task-step"><span class="step-num">04</span><span>Toma el <span class="hl-amber">MUTEX</span> con <code class="hl">xSemaphoreTake()</code></span></div>
+      <div class="task-step"><span class="step-num">05</span><span>Escribe <code class="hl">temperatura = temp</code></span></div>
+      <div class="task-step"><span class="step-num">06</span><span>Libera <span class="hl-amber">MUTEX</span> con <code class="hl">xSemaphoreGive()</code></span></div>
+    </div>
+
+    <div class="arrow-col">
+      <span>MUTEX</span>
+    </div>
+
+    <div class="task-col">
+      <div class="task-header">
+        <h4>tareaWeb()</h4>
+        <span class="prio-badge prio-low">Prioridad 1</span>
+      </div>
+      <div class="task-step"><span class="step-num">01</span><span>Llama <code class="hl">server.handleClient()</code> continuamente</span></div>
+      <div class="task-step"><span class="step-num">02</span><span>Al recibir GET <code class="hl">/</code> invoca <code class="hl">handleRoot()</code></span></div>
+      <div class="task-step"><span class="step-num">03</span><span>Toma el <span class="hl-amber">MUTEX</span> con <code class="hl">xSemaphoreTake()</code></span></div>
+      <div class="task-step"><span class="step-num">04</span><span>Lee <code class="hl">tempActual = temperatura</code></span></div>
+      <div class="task-step"><span class="step-num">05</span><span>Libera <span class="hl-amber">MUTEX</span> con <code class="hl">xSemaphoreGive()</code></span></div>
+      <div class="task-step"><span class="step-num">06</span><span>Envía página HTML con <code class="hl">server.send(200)</code></span></div>
+    </div>
+
+    <div class="mutex-center">
+      <div class="mu-icon">⚿</div>
+      <div>
+        <h4>SemaphoreHandle_t mutex</h4>
+        <p>Protege la variable <code style="background:#0d3d1e;color:#2dff6e;padding:1px 5px;border-radius:3px;">float temperatura</code> — recurso compartido entre ambas tareas. Solo una tarea puede tenerlo a la vez. Si está tomado, la otra tarea queda bloqueada hasta que se libere.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: INTEGRANTES -->
+  <div class="section-label">// 05 — Integrantes del equipo</div>
+
+  <div class="team-section">
+    <div class="team-header">// Sistemas Operativos · Semana 7 · Componente Práctico</div>
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="avatar">EJR</div>
+        <div class="name">Edison Javier Real Mosquera</div>
+        <div class="role">// Integrante</div>
+      </div>
+      <div class="team-card">
+        <div class="avatar">EDA</div>
+        <div class="name">Eduardo David Álvares Bajaña</div>
+        <div class="role">// Integrante</div>
+      </div>
+      <div class="team-card">
+        <div class="avatar">FNS</div>
+        <div class="name">Fiorella Naomi Solís García</div>
+        <div class="role">// Integrante</div>
+      </div>
+      <div class="team-card">
+        <div class="avatar">JFM</div>
+        <div class="name">Joel Fernando Morán Ortiz</div>
+        <div class="role">// Integrante</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>
